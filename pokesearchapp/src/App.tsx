@@ -11,15 +11,10 @@ import usePrevious from './hooks/usePrevious';
 import { withAITracking } from '@microsoft/applicationinsights-react-js';
 import { v4 as uuidv4 } from 'uuid';
 import { RootObject } from './types/predictionResult.type';
-const PREDICTION_URL = 'https://pokesearchclu-dev.cognitiveservices.azure.com/language/:analyze-conversations?api-version=2022-10-01-preview';
-const API_URL = 'https://pokesearchapidev.azurewebsites.net/api/pokemon';
-const pokeTypes = [["Normal", "Fire", "Water", "Grass", "Electric", "Ice",
-"Fighting", "Poison", "Ground", "Flying", "Psychic", "Bug",
-"Rock", "Ghost", "Dark", "Dragon", "Steel", "Fairy"]] 
-
- function thirdCapital(word:string) {
-    return word.charAt(0).toLowerCase()+word.charAt(1).toLowerCase()+word.charAt(2).toUpperCase() + word.slice(3);
-  }
+import loadingView from './components/loadingView';
+import tableView from './components/tableView';
+import {PREDICTION_URL, API_URL, pokeTypes, thirdCapital, getPrediction} from './components/helperMethods'
+import {statPredictionBox,fightPredictionBox} from './components/predictionBoxes';
 
 const App: FC = () => {
   const [page, setPage] = useState(1);
@@ -60,10 +55,10 @@ const App: FC = () => {
     }) 
   const [showStatBox, setShowStatBox] = useState(false);
   const [showFightBox, setShowFightBox] = useState(false);
-
+  
   useEffect(() => {
      let uuid = uuidv4();
-      setUserUuid(uuid);
+     setUserUuid(uuid);
   },[])
 
   useEffect(() => {
@@ -131,40 +126,11 @@ const App: FC = () => {
         setPrediction(JSON.stringify(data));
       }
     }
-  )
-
-  async function getPrediction(q?: string) {
-    if (!q) {
-      return {}
-    }
-    const res = await fetch(PREDICTION_URL, {
-      method: 'POST',
-      headers: {
-        'Ocp-Apim-Subscription-Key': 'ce2b90fdc70c4717bf3b5feed35de982',
-        'Apim-Request-Id': '4ffcac1c-b2fc-48ba-bd6d-b69d9942995a',
-        'Content-Type':'application/json'
-      },
-      body: JSON.stringify({
-        "kind": "Conversation",
-        "analysisInput": {
-          "conversationItem": {
-            "id": "1",
-            "text": q||"",
-            "modality": "text",
-            "language": "en-us",
-            "participantId": "1"
-          }
-        },
-        "parameters": {
-          "projectName": "pokeAttack",
-          "verbose": true,
-          "deploymentName": "GeneratorModel",
-          "stringIndexType": "TextElement_V8"
-        }
-      })
-    })
-    return res.json()
-  }
+    )
+ 
+  const { isLoading, data } = usePokes(searchKey, type1, type2, page);
+  const { mutate } = usePokeMutation(searchKey);
+  
 
   async function getPokeList(q?: string, t1?: string, t2?: string, pageNumber?: number) {
     const query = `q=${q}&type1=${t1}&type2=${t2}&pageNumber=${pageNumber}`
@@ -213,6 +179,7 @@ const App: FC = () => {
         
     return res.json(); 
   }
+ 
 
   const pages = [];
   if (pageCount > 7) {
@@ -238,9 +205,6 @@ const App: FC = () => {
       );
     }  
   }
-  
-  const { isLoading, data } = usePokes(searchKey, type1, type2, page);
-  const { mutate,  } = usePokeMutation(searchKey);
 
   const handleCheckChange = (e:any) =>{
     //e.preventDefault();
@@ -285,135 +249,6 @@ const App: FC = () => {
     setIsSet(!isSet)
   }
   
-  const statPredictionBox = () => {
-    const Box = () => {
-      return (
-        <Container className="w-50" fluid='md'>
-          <div className="d-flex justify-content-center p-2">
-            {pokeFromPrediction1.englishName}'s {statEntity.toLowerCase() === 'spattack' || statEntity.toLowerCase() === 'spdefense' ? thirdCapital(statEntity) : statEntity.toLowerCase()} is: 
-            {statEntity.toLowerCase() === 'spattack' || statEntity.toLowerCase() === 'spdefense' ? 
-            ' '+pokeFromPrediction1[thirdCapital(statEntity) as keyof ILongPokemon]:
-            ' '+pokeFromPrediction1[statEntity.toLowerCase() as keyof ILongPokemon]}
-          </div>
-        </Container>
-      )}
-    const ErrorBox = () => {
-      return (
-        <Container fluid='md'>
-          <div className="d-flex justify-content-center p-2">
-           Loading...
-          </div>
-        </Container>
-      )}
-    return (
-      <div> {pokeFromPrediction1.id > 0 ?<Box/>:<ErrorBox/>}</div>
-    )}
-
-  const fightPredictionBox = () => {
-    const Box = () => {
-      return (
-        <Container className="w-50" fluid='md'>
-          <div className="d-flex justify-content-center p-2">
-           <Table size="sm">
-            <thead>
-              <tr>
-                <th>*</th>
-                <th>{pokeFromPrediction1.englishName}</th>
-                <th>{pokeFromPrediction2.englishName}</th>
-              </tr>
-              </thead>
-              <tbody>
-                { Object.entries(pokeFromPrediction1).map(([key]) => (
-                  !['id', 'englishName', 'type1', 'type2'].includes(key) ?
-                  <tr>
-                    <td>{key}</td>
-                    {pokeFromPrediction1[key as keyof ILongPokemon] > pokeFromPrediction2[key as keyof ILongPokemon] ?
-                      <th>{pokeFromPrediction1[key as keyof ILongPokemon]}</th>:
-                      <td>{pokeFromPrediction1[key as keyof ILongPokemon]}</td>}
-                    {pokeFromPrediction1[key as keyof ILongPokemon] < pokeFromPrediction2[key as keyof ILongPokemon] ?
-                      <th>{pokeFromPrediction2[key as keyof ILongPokemon]}</th>:
-                      <td>{pokeFromPrediction2[key as keyof ILongPokemon]}</td>}
-                  </tr>:<></>
-                ))}
-              </tbody>
-            </Table>  
-          </div>
-        </Container>
-      )}
-    const ErrorBox = () => {
-      return (
-        <Container fluid='md'>
-          <div className="d-flex justify-content-start p-2">
-           Loading...
-          </div>
-        </Container>
-      )}
-    return (
-    <div>
-        {(pokeFromPrediction1.id > 0 && pokeFromPrediction2.id > 0) ?<Box/>:<ErrorBox/>}
-      </div>
-    )}
-
-  const loadingView = () => {
-    return (
-    <Table striped bordered hover size="sm">
-      <thead>
-        <tr>
-          <th>Id</th>
-          <th>Name</th>
-          <th>Type 1</th>
-          <th>Type 2</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Loading...</td>
-          <td>Loading...</td>
-          <td>Loading...</td>
-          <td>Loading...</td>
-        </tr>
-      </tbody>
-    </Table>
-    )
-  }
-
-  const tableView = () => {
-    return (
-    <Table striped bordered hover size="sm">
-        <thead>
-          <tr>
-            <th>Id</th>
-            <th>Name</th>
-            <th>Type 1</th>
-            <th>Type 2</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data?.map((poke, index) => (
-            <tr key={poke.id}>
-              <td>{poke.id}</td>
-              <td><Link
-                state={{userUuid:userUuid}}  
-                onClick={() => appInsights.trackEvent({
-                  name: "clickedPokemonLink", properties:
-                  {
-                    userUuid: userUuid, pokeId: poke.id, types: [poke.type1, poke.type2],
-                    position: index+1, totalPosition: (page - 1) * 10 + index+1, pageNumber: page
-                  }
-                })}
-                to={`pokemon/${poke.id}`}>
-                {poke.englishName}
-              </Link></td>
-              <td>{poke.type1}</td>
-              <td>{poke.type2}</td>
-            </tr>
-          ))}
-        </tbody>
-      </Table>
-    )
-  }
-
-
   return (
     <Container fluid='md'>
      
@@ -456,9 +291,9 @@ const App: FC = () => {
            </div>  
           ))}
       </Form>
-    {showFightBox ? fightPredictionBox() : <div></div> }  
-    {showStatBox ? statPredictionBox() : <div></div> } 
-    {isLoading ? loadingView() : tableView()}
+    {showFightBox ? fightPredictionBox(pokeFromPrediction1??'{}',pokeFromPrediction2??'{}') : <div></div> }  
+    {showStatBox ? statPredictionBox(pokeFromPrediction1??'{}',statEntity??'{}') : <div></div> } 
+    {isLoading ? loadingView() : tableView(userUuid,page,data)}
 
       <Pagination className="justify-content-md-center">
         <Pagination.First onClick={() => setPage(1)}/>

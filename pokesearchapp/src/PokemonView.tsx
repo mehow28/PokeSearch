@@ -7,8 +7,10 @@ import { appInsights, reactPlugin } from './appInsights';
 import { withAITracking } from "@microsoft/applicationinsights-react-js";
 import { v4 as uuidv4 } from 'uuid';
 import { useLocation } from 'react-router-dom'
+import {tableViewPoke} from "./components/tableView";
+import loadingView from "./components/loadingView";
 
-const API_URL = 'https://pokesearchapidev.azurewebsites.net/api/pokemon';
+const API_URL = 'https://<XXX>.azurewebsites.net/api/pokemon';
 
 const PokemonView: FC = () => {
     const [pokemon, setPokemon] = useState<ILongPokemon>();
@@ -18,33 +20,11 @@ const PokemonView: FC = () => {
     const idPar = useParams().pokeId
     const location = useLocation();
     const { userUuid } = location.state || uuidv4();
-    // let userUuid = "";
-
-    // if (location.state.userUuid == null) {
-    //     userUuid = uuidv4();
-        
-    // }
-    // else {
-    //     userUuid = location.state.userUuid;
-    // }
-
-    // console.log(idPar)
-
+   
     useEffect(() => {
         appInsights.trackEvent({
                 name: "pokemonViewVisit", properties: { pokeId: idPar, userUuid:userUuid  }
             })
-       
-        // if (userUuid != null) {
-        //     appInsights.trackEvent({
-        //             name: "pokemonViewVisit", properties: { pokeId: idPar, userUuid:userUuid  }
-        //         }) 
-        // }
-        // else {
-        //     appInsights.trackEvent({
-        //         name: "pokemonViewVisit", properties: { pokeId: idPar, userUuid:uuidv4() }
-        //     })
-        // }
     },[])
 
     const setPokemonInfo = (poke: any) => {
@@ -52,7 +32,6 @@ const PokemonView: FC = () => {
         setFetchId(poke.id.toString() || "")
         setType1(poke.type1||"")
         setType2(poke.type2 || "")
-        //refetch()
     }
     const getOnePoke = async (id: string) => {
         const res = await fetch(`${API_URL}/${id}`);
@@ -81,63 +60,6 @@ const PokemonView: FC = () => {
             keepPreviousData: false,
         },
         );
-        
-    const loadingView = () => {
-        return (
-        <Table striped bordered hover size="sm">
-        <thead>
-            <tr>
-            <th>Id</th>
-            <th>Name</th>
-            <th>Type 1</th>
-            <th>Type 2</th>
-            </tr>
-        </thead>
-        <tbody>
-            <tr>
-            <td>Loading...</td>
-            <td>Loading...</td>
-            <td>Loading...</td>
-            <td>Loading...</td>
-            </tr>
-        </tbody>
-        </Table>
-        )
-    }
-    
-    const tableView = () => {
-        return (
-            <Table striped bordered hover size="sm">
-            <thead>
-            <tr>
-                <th>Id</th>
-                <th>Name</th>
-                <th>Type 1</th>
-                <th>Type 2</th>
-            </tr>
-            </thead>
-            <tbody>
-            {data?.map((poke,index) => (
-                <tr key={poke.id}>
-                <td>{poke.id}</td>
-                    <td><Link to={`/pokemon/${poke.id}`}
-                        state={{userUuid:userUuid}} 
-                        onClick={() => appInsights.trackEvent({
-                        name: "clickedPokemonOfType", properties:
-                        {
-                            pokeId: poke.id, types: [poke.type1, poke.type2],
-                            position: index+1, userUuid:userUuid
-                        }
-                    })}>{poke.englishName}</Link></td>
-                    <td>{poke.type1}</td>
-                    <td>{poke.type2}</td>
-                </tr>
-            ))}
-            </tbody>
-        </Table>
-        )
-    }
-    
     
     const {status,data:pokemonData} = usePoke(idPar||"")
     const {isLoading,data} = usePokes(fetchId,type1,type2)
@@ -147,13 +69,12 @@ const PokemonView: FC = () => {
             setPokemonInfo(pokemonData);
             console.log("hi!")
         }
-        //getPoke().then((poke) => setPokemonInfo(poke)).then(()=>setPar(idPar))
     }, [status,pokemonData])
     
     console.log(status)
     if (!pokemon) {
         return (
-            <div></div>
+            <></>
             )
         }
         else {       
@@ -175,7 +96,7 @@ const PokemonView: FC = () => {
                         { pokemon.type2 ? <h6>type 2: {pokemon.type2}</h6> : null}
                 </Col>
                 <Col xs="8">
-                     {isLoading ? loadingView() : tableView()}
+                     {isLoading ? loadingView() : tableViewPoke(userUuid,data)}
                 </Col >
                 </Row>
             </Container>
