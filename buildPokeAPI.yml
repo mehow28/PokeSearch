@@ -1,0 +1,16 @@
+trigger:
+- master
+
+stages:
+- stage: Build
+  jobs:
+  - job: Build
+    pool: Default
+    steps:
+    - powershell: dotnet publish 'PokeAPI/PokeAPI.csproj' -c Release -o artifact
+    - powershell: Compress-Archive artifact/* '$(Build.ArtifactStagingDirectory)/PokeAPI.zip'
+    - task: PublishBuildArtifacts@1
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'PokeAPIdrop'
+        publishLocation: 'Container'

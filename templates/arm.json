@@ -1,0 +1,1158 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "env": {
+      "type": "string"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.Storage/storageAccounts",
+      "name": "[concat('pokesearchstorage', parameters('env'))]",
+      "location": "[resourceGroup().location]",
+      "apiVersion": "2021-09-01",
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "tags": {
+        "env": "[parameters('env')]"
+      },
+      "kind": "StorageV2",
+      "properties": {
+        "dnsEndpointType": "Standard",
+        "defaultToOAuthAuthentication": false,
+        "publicNetworkAccess": "Enabled",
+        "allowCrossTenantReplication": true,
+        "minimumTlsVersion": "TLS1_2",
+        "allowBlobPublicAccess": true,
+        "allowSharedKeyAccess": true,
+        "networkAcls": {
+          "bypass": "AzureServices",
+          "virtualNetworkRules": [],
+          "ipRules": [],
+          "defaultAction": "Allow"
+        },
+        "supportsHttpsTrafficOnly": true,
+        "encryption": {
+          "requireInfrastructureEncryption": false,
+          "services": {
+            "file": {
+              "keyType": "Account",
+              "enabled": true
+            },
+            "blob": {
+              "keyType": "Account",
+              "enabled": true
+            }
+          },
+          "keySource": "Microsoft.Storage"
+        },
+        "accessTier": "Hot"
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/blobServices",
+      "apiVersion": "2021-09-01",
+      "name": "[concat(concat('pokesearchstorage', parameters('env')), '/default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env')))]"
+      ],
+      "sku": {
+        "name": "Standard_RAGRS",
+        "tier": "Standard"
+      },
+      "properties": {
+        "changeFeed": {
+          "enabled": false
+        },
+        "restorePolicy": {
+          "enabled": false
+        },
+        "containerDeleteRetentionPolicy": {
+          "enabled": false
+        },
+        "cors": {
+          "corsRules": []
+        },
+        "deleteRetentionPolicy": {
+          "allowPermanentDelete": false,
+          "enabled": true,
+          "days": 7
+        },
+        "isVersioningEnabled": false
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/queueServices",
+      "apiVersion": "2021-09-01",
+      "name": "[concat(concat('pokesearchstorage', parameters('env')), '/default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env')))]"
+      ],
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Storage/storageAccounts/tableServices",
+      "apiVersion": "2021-09-01",
+      "name": "[concat(concat('pokesearchstorage', parameters('env')), '/default')]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env')))]"
+      ],
+      "properties": {
+        "cors": {
+          "corsRules": []
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Web/serverfarms",
+      "apiVersion": "2021-02-01",
+      "name": "[concat('pokesearchfarm-', parameters('env'))]",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "env": "[parameters('env')]"
+      },
+      "sku": {
+        "name": "P1v2",
+        "tier": "PremiumV2",
+        "size": "P1v2",
+        "family": "Pv2",
+        "capacity": 3
+      },
+      "properties": {
+        "name": "[concat('pokesearchfarm-', parameters('env'))]",
+        "computeMode": "Dynamic"
+      }
+    },
+    {
+      "type": "Microsoft.Web/sites",
+      "apiVersion": "2022-03-01",
+      "name": "[concat('pokesearchfunc-', parameters('env'))]",
+      "location": "[resourceGroup().location]",
+      "kind": "functionapp",
+      "tags": {
+        "env": "[parameters('env')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]",
+        "[resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env')))]",
+        "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+      ],
+      "properties": {
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]",
+        "siteConfig": {
+          "alwaysOn": true,
+          "appSettings": [
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('microsoft.insights/components/', concat('pokesearchappinsights-', parameters('env'))), '2020-02-02-preview').InstrumentationKey]"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', concat('pokesearchstorage', parameters('env')), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env'))),'2021-09-01').keys[0].value)]"
+            },
+            {
+              "name": "FUNCTIONS_WORKER_RUNTIME",
+              "value": "dotnet"
+            },
+            {
+              "name": "FUNCTIONS_EXTENSION_VERSION",
+              "value": "~3"
+            },
+            {
+              "name": "FUNCAPP_ENV",
+              "value": "[parameters('env')]"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "name": "[concat('pokesearchappinsights-', parameters('env'))]",
+      "type": "microsoft.insights/components",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "env": "[parameters('env')]"
+      },
+      "apiVersion": "2020-02-02-preview",
+      "dependsOn": [
+        "[resourceId('Microsoft.OperationalInsights/workspaces', concat('pokesearchaiws-', parameters('env')))]"
+      ],
+      "properties": {
+        "ApplicationId": "[concat('pokesearchappinsights-', parameters('env'))]",
+        "Application_Type": "web",
+        "Flow_Type": "Redfield",
+        "Request_Source": "IbizaAIExtension",
+        "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', concat('pokesearchaiws-', parameters('env')))]"
+      }
+    },
+    {
+      "name": "[concat('pokesearchaiws-', parameters('env'))]",
+      "apiVersion": "2022-10-01",
+      "type": "Microsoft.OperationalInsights/workspaces",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "env": "[parameters('env')]"
+      },
+      "properties": {
+        "sku": {
+          "name": "pergb2018"
+        },
+        "retentionInDays": "[if(equals(parameters('env'), 'dev'), 30, 350)]",
+        "features": {
+          "enableLogAccessUsingOnlyResourcePermissions": true
+        },
+        "workspaceCapping": {
+          "dailyQuotaGb": -1
+        },
+        "publicNetworkAccessForIngestion": "Enabled",
+        "publicNetworkAccessForQuery": "Enabled"
+      }
+    },
+    {
+      "apiVersion": "2018-11-01",
+      "name": "[concat('pokesearch', parameters('env'))]",
+      "type": "Microsoft.Web/sites",
+      "location": "[resourceGroup().location]",
+      "tags": null,
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]",
+        "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]"
+      ],
+      "properties": {
+        "name": "[concat('pokesearch', parameters('env'))]",
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('microsoft.insights/components/', concat('pokesearchappinsights-', parameters('env'))), '2020-02-02-preview').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('microsoft.insights/components/', concat('pokesearchappinsights-', parameters('env'))), '2020-02-02-preview').ConnectionString]"
+            },
+            {
+              "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+              "value": "~2"
+            },
+            {
+              "name": "XDT_MicrosoftApplicationInsights_Mode",
+              "value": "default"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', concat('pokesearchstorage', parameters('env')), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env'))),'2021-09-01').keys[0].value)]"
+            },
+            {
+              "name": "AzureWebJobsDashboard",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', concat('pokesearchstorage', parameters('env')), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env'))),'2021-09-01').keys[0].value)]"
+            },
+            {
+              "name": "WEBAPP_ENV",
+              "value": "[parameters('env')]"
+            }
+          ],
+          "alwaysOn": true
+        },
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]",
+        "clientAffinityEnabled": true,
+        "virtualNetworkSubnetId": null,
+        "httpsOnly": true
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2022-07-01",
+      "name": "[concat('pokeSearchKeyVault-', parameters('env'))]",
+      "location": "northeurope",
+      "properties": {
+        "sku": {
+          "family": "A",
+          "name": "Standard"
+        },
+        "tenantId": "ec0c3cd0-5bd6-4c13-87c2-f45543cab0e1",
+        "accessPolicies": [
+          {
+            "tenantId": "ec0c3cd0-5bd6-4c13-87c2-f45543cab0e1",
+            "objectId": "1469d6c2-7124-4759-b187-eb70198a00f8",
+            "permissions": {
+              "keys": [
+                "Get",
+                "List",
+                "Update",
+                "Create",
+                "Import",
+                "Delete",
+                "Recover",
+                "Backup",
+                "Restore",
+                "GetRotationPolicy",
+                "SetRotationPolicy",
+                "Rotate"
+              ],
+              "secrets": [
+                "Get",
+                "List",
+                "Set",
+                "Delete",
+                "Recover",
+                "Backup",
+                "Restore"
+              ],
+              "certificates": [
+                "Get",
+                "List",
+                "Update",
+                "Create",
+                "Import",
+                "Delete",
+                "Recover",
+                "Backup",
+                "Restore",
+                "ManageContacts",
+                "ManageIssuers",
+                "GetIssuers",
+                "ListIssuers",
+                "SetIssuers",
+                "DeleteIssuers"
+              ]
+            }
+          }
+        ],
+        "enabledForDeployment": false,
+        "enabledForDiskEncryption": false,
+        "enabledForTemplateDeployment": false,
+        "enableSoftDelete": true,
+        "softDeleteRetentionInDays": 90,
+        "enableRbacAuthorization": false,
+        "vaultUri": "[concat('https://pokesearchkeyvault-', parameters('env'),'dev.vault.azure.net/')]",
+        "provisioningState": "Succeeded",
+        "publicNetworkAccess": "Enabled"
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2022-07-01",
+      "name": "[concat('pokeSearchKeyVault-', parameters('env'), '/ApplicationInsights--InstrumentationKey')]",
+      "location": "northeurope",
+      "dependsOn": [
+        "[resourceId(concat('pokeSearchKeyVault-', parameters('env'))))]"
+      ],
+      "properties": {
+        "attributes": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2022-07-01",
+      "name": "[concat('pokeSearchKeyVault-', parameters('env'), '/AzureWebJobsStorageDev')]",
+      "location": "northeurope",
+      "dependsOn": [
+        "[resourceId(concat('pokeSearchKeyVault-', parameters('env'))))]"
+      ],
+      "properties": {
+        "contentType": "SQLServer",
+        "attributes": {
+          "enabled": true
+        }
+      }
+    },
+    {
+      "apiVersion": "2018-11-01",
+      "name": "[concat('pokesearchAPI', parameters('env'))]",
+      "type": "Microsoft.Web/sites",
+      "location": "[resourceGroup().location]",
+      "tags": null,
+      "dependsOn": [
+        "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]",
+        "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]"
+      ],
+      "properties": {
+        "name": "[concat('pokesearchAPI', parameters('env'))]",
+        "siteConfig": {
+          "appSettings": [
+            {
+              "name": "APPINSIGHTS_INSTRUMENTATIONKEY",
+              "value": "[reference(resourceId('microsoft.insights/components/', concat('pokesearchappinsights-', parameters('env'))), '2020-02-02-preview').InstrumentationKey]"
+            },
+            {
+              "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+              "value": "[reference(resourceId('microsoft.insights/components/', concat('pokesearchappinsights-', parameters('env'))), '2020-02-02-preview').ConnectionString]"
+            },
+            {
+              "name": "ApplicationInsightsAgent_EXTENSION_VERSION",
+              "value": "~2"
+            },
+            {
+              "name": "XDT_MicrosoftApplicationInsights_Mode",
+              "value": "default"
+            },
+            {
+              "name": "AzureWebJobsStorage",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', concat('pokesearchstorage', parameters('env')), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env'))),'2021-09-01').keys[0].value)]"
+            },
+            {
+              "name": "AzureWebJobsDashboard",
+              "value": "[concat('DefaultEndpointsProtocol=https;AccountName=', concat('pokesearchstorage', parameters('env')), ';AccountKey=', listKeys(resourceId('Microsoft.Storage/storageAccounts', concat('pokesearchstorage', parameters('env'))),'2021-09-01').keys[0].value)]"
+            },
+            {
+              "name": "WEBAPP_ENV",
+              "value": "[parameters('env')]"
+            }
+          ],
+          "alwaysOn": true
+        },
+        "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', concat('pokesearchfarm-', parameters('env')))]",
+        "clientAffinityEnabled": true,
+        "virtualNetworkSubnetId": null,
+        "httpsOnly": true
+      }
+    },
+    {
+      "properties": {
+        "lenses": {
+          "0": {
+            "order": 0,
+            "parts": {
+              "0": {
+                "position": {
+                  "x": 0,
+                  "y": 0,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "12bb95d4-5f23-408c-a06e-dd77b022bb6f",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | summarize Unique_Users=dcount(user_Id)\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('pokesearchappinsights-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "PartTitle": "Ile użytkowników odwiedzilo stronę"
+                    }
+                  }
+                }
+              },
+              "1": {
+                "position": {
+                  "x": 5,
+                  "y": 0,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "12cf6e1b-15fc-42c8-9db6-21bd95b15398",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | where name==\"pokeQuery\" | summarize Count=count() by session_Id | summarize AverageNoOfQueries=avg(Count)\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('pokesearchappinsights-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "GridColumnsWidth": {
+                        "AverageNoOfQueries": "162px"
+                      },
+                      "PartTitle": "Ile średnio wyszukiwań zrobił użytkownik w sesji"
+                    }
+                  }
+                }
+              },
+              "2": {
+                "position": {
+                  "x": 0,
+                  "y": 2,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "10308236-3b02-4cad-b677-7e900f110eea",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | summarize noSearches=dcountif(session_Id,customDimensions.value==\"q=&type1=&type2=&pageNumber=1\" and strlen(customDimensions.value)<=29), allSessions=dcount(session_Id), bounceRatePercentage=(dcountif(session_Id,customDimensions.value==\"q=&type1=&type2=&pageNumber=1\")*100)/dcount(session_Id), State=\"Zapytanie niedokończone\"\n\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('pokesearchappinsights-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "GridColumnsWidth": {
+                        "allSessions": "99px",
+                        "noSearches": "109px",
+                        "State": "171px",
+                        "bounceRatePercentage": "188px"
+                      },
+                      "PartTitle": "Bounce Rate"
+                    }
+                  }
+                }
+              },
+              "3": {
+                "position": {
+                  "x": 5,
+                  "y": 2,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "10c7e916-27f9-4db9-8d15-21817fd1eef0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | summarize clickedPoke=dcountif(tostring(customDimensions.userUuid),tostring(customDimensions.userUuid)!=\"\" and tostring(customDimensions.userUuid)!=\"undefined\" and name==\"pokemonViewVisit\"),allVisits=dcountif(tostring(customDimensions.userUuid),tostring(customDimensions.userUuid)!=\"\" and tostring(customDimensions.userUuid)!=\"undefined\"), conversionRatePercentage=(dcountif(tostring(customDimensions.userUuid),tostring(customDimensions.userUuid)!=\"\" and tostring(customDimensions.userUuid)!=\"undefined\" and name==\"pokemonViewVisit\"))*100/dcountif(tostring(customDimensions.userUuid),tostring(customDimensions.userUuid)!=\"\" and tostring(customDimensions.userUuid)!=\"undefined\")\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('pokesearchappinsights-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {}
+                }
+              },
+              "4": {
+                "position": {
+                  "x": 0,
+                  "y": 4,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "80f2953f-438a-4fae-b615-140e1298a345",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | where name==\"clickedPokemonOfType\" | summarize clicks=count() by pokeId=tostring(customDimensions.pokeId) | order by clicks desc\n\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('pokesearchappinsights-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "PartTitle": "Ile razy kliknięto na link w sekcji \"other with type\""
+                    }
+                  }
+                }
+              },
+              "5": {
+                "position": {
+                  "x": 0,
+                  "y": 6,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "53f12a0d-b5e8-4982-965e-1013d12ad99f",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | where name==\"pokeQuery\" | summarize hasType=countif(customDimensions.types!=\"[\\\"\\\",\\\"\\\"]\" and customDimensions.types!=\"[null,null]\"), Total=count()| extend QueriesWithTypePercentage=(hasType*100)/Total\n\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('appinsightsmp28-', parameters('env')))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "GridColumnsWidth": {
+                        "Total": "74px",
+                        "hasType": "87px",
+                        "QueriesWithTypePercentage": "226px"
+                      },
+                      "Query": "customEvents | where name==\"pokeQuery\" | summarize hasType=dcountif(session_Id,customDimensions.types!=\"[\\\"\\\",\\\"\\\"]\" and customDimensions.types!=\"[null,null]\"), Total=dcount(session_Id)| extend UsersWhoChoseTypePercentage=(hasType*100)/Total\n\n",
+                      "PartTitle": "Ile procent użytkownikow wybralo typ pokemona"
+                    }
+                  }
+                }
+              },
+              "6": {
+                "position": {
+                  "x": 5,
+                  "y": 6,
+                  "colSpan": 5,
+                  "rowSpan": 2
+                },
+                "metadata": {
+                  "inputs": [
+                    {
+                      "name": "resourceTypeMode",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ComponentId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Scope",
+                      "value": {
+                        "resourceIds": [
+                          "[resourceId('Microsoft.Insights/components', concat('pokesearchappinsights-', parameters('env')))]"
+                        ]
+                      },
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartId",
+                      "value": "14d33c6b-35e7-4b68-a913-814a85510884",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Version",
+                      "value": "2.0",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "TimeRange",
+                      "value": "P7D",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DashboardId",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "DraftRequestParameters",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Query",
+                      "value": "customEvents | where name==\"pokeQuery\" | summarize NoResults=countif(customDimensions.numberOfResults==\"0\"), Total=count() | extend Result=(NoResults*100)/Total\n",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "ControlType",
+                      "value": "AnalyticsGrid",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "SpecificChart",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartTitle",
+                      "value": "Analytics",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "PartSubTitle",
+                      "value": "[concat('appinsightsmp28-', parameters('env'))]",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "Dimensions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "LegendOptions",
+                      "isOptional": true
+                    },
+                    {
+                      "name": "IsQueryContainTimeRange",
+                      "value": false,
+                      "isOptional": true
+                    }
+                  ],
+                  "type": "Extension/Microsoft_OperationsManagementSuite_Workspace/PartType/LogsDashboardPart",
+                  "settings": {
+                    "content": {
+                      "GridColumnsWidth": {
+                        "NoResults": "96px",
+                        "Total": "67px"
+                      },
+                      "PartTitle": "Ile procent wyszukiwań zwróciło pusty wynik"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "metadata": {
+          "model": {
+            "timeRange": {
+              "value": {
+                "relative": {
+                  "duration": 24,
+                  "timeUnit": 1
+                }
+              },
+              "type": "MsPortalFx.Composition.Configuration.ValueTypes.TimeRange"
+            },
+            "filterLocale": {
+              "value": "en-us"
+            },
+            "filters": {
+              "value": {
+                "MsPortalFx_TimeRange": {
+                  "model": {
+                    "format": "local",
+                    "granularity": "auto",
+                    "relative": "7d"
+                  },
+                  "displayCache": {
+                    "name": "Local Time",
+                    "value": "Past 7 days"
+                  },
+                  "filteredPartIds": [
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d13318009",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d1331800b",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d1331800d",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d13318015",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d1331800f",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d13318011",
+                    "StartboardPart-LogsDashboardPart-2f36ad2e-19a2-4616-b33e-e18d13318013"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      "name": "[concat('pokesearchDashboard', parameters('env'))]",
+      "type": "Microsoft.Portal/dashboards",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "hidden-title": "[concat('pokesearchDashboard', parameters('env'))]"
+      },
+      "apiVersion": "2015-08-01-preview"
+    }
+  ]
+}

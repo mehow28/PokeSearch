@@ -1,0 +1,31 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+trigger:
+- none
+stages:
+- stage: DeployDev
+  jobs:
+  - job: DeployDev
+    pool: Default
+    steps: 
+    - powershell: az login --identity
+      displayName: 'az login'
+    - powershell: az deployment group create --resource-group SearchIntern2 --template-file '$(Build.SourcesDirectory)/templates/arm.json' --parameters env=dev
+      displayName: az deployment dev
+- stage:
+  jobs:
+  - deployment: DeployProd
+    pool: Default
+    environment: 'yaml-deploy'
+    strategy:
+      runOnce:
+        deploy:    
+          steps:
+          - powershell: az deployment group create --resource-group SearchIntern2 --template-file '$(Build.SourcesDirectory)/templates/arm.json' --parameters env=prod
+            displayName: az deployment prod
+
+
+

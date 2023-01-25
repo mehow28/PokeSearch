@@ -1,0 +1,19 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+parameters:
+- name: 'env'
+  default: ''
+
+steps:
+- powershell: az login --identity
+  workingDirectory: $(System.ArtifactsDirectory)
+  displayName: az login
+- download: none
+- download: BuildPokeAPI
+  artifact: PokeAPIdrop
+- powershell: az webapp deploy --resource-group SearchIntern2 --name pokesearchAPI${{ parameters.env }} --src-path $(PIPELINE.WORKSPACE)/BuildPokeAPI/PokeAPIdrop/PokeAPI.zip
+  workingDirectory: '$(System.ArtifactsDirectory)'
+  displayName: 'az deploy' 

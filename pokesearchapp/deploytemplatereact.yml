@@ -1,0 +1,14 @@
+parameters:
+- name: 'env'
+  default: ''
+
+steps:
+- powershell: az login --identity
+  workingDirectory: $(System.ArtifactsDirectory)
+  displayName: az login
+- download: none
+- download: BuildReact
+  artifact: npm
+- powershell: az webapp deploy --resource-group SearchIntern2 --name pokesearch${{ parameters.env }} --src-path $(PIPELINE.WORKSPACE)/BuildReact/npm/npm.zip
+  workingDirectory: '$(System.ArtifactsDirectory)'
+  displayName: 'az deploy' 
